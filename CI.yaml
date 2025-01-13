@@ -1,0 +1,31 @@
+- name: Generate GitHub App Token
+  id: generate_app_token
+  env:
+    APP_ID: ${{ vars.APP_ID}}   # Your saved GitHub App ID in GitHub variables [ Settings > Secrets > Actions > New repository secret > APP_ID]
+    PRIVATE_KEY: ${{ secrets.GH_KEY }} # Your saved GitHub App private key in GitHub secrets [ Settings > Secrets > Actions > New repository secret > GH_KEY]
+  run: |
+    jwt=$(ruby <<EOF
+    require 'openssl'
+    require 'jwt'
+    private_key = OpenSSL::PKey::RSA.new(ENV['PRIVATE_KEY'])
+    payload = {
+      iat: Time.now.to_i,
+      exp: Time.now.to_i + 600,
+      iss: ENV['APP_ID']
+    }
+    token = JWT.encode(payload, private_key, 'RS256')
+    puts token
+    EOF
+    )
+    echo "JWT=$jwt" >> $GITHUB_ENV
+- name: Get Installation Token
+  id: get_installation_token
+  env:
+    INSTALLATION_ID: ${{ vars.INSTALLATION_APP_ID}}  # Your saved GitHub App Installation ID in GitHub variables [ Settings > Secrets > Actions > New repository secret > INSTALLATION_APP_ID] Also you can find it in the URL when you open the installation page or this repository python script can help you to get it.
+  run: |
+    token_response=$(curl -s -X POST \
+      -H "Authorization: Bearer $JWT" \
+      -H "Accept: application/vnd.github.v3+json" \
+      https://api.github.com/app/installations/$INSTALLATION_ID/access_tokens)
+    token=$(echo $token_response | jq -r '.token')
+    echo "INSTALLATION_TOKEN=$token" >> $GITHUB_ENV # Save the token in the GitHub environment variables [ You can use it ${{ env.INSTALLATION_TOKEN }}]
